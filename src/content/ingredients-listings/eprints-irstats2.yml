@@ -1,0 +1,5 @@
+name: "irstats2"
+creator: "eprints"
+repo_url: "https://github.com/eprints/irstats2"
+description: "This ingredient add support for tracking user actions"
+latest_eprints_version_tested: "3.4.7"
