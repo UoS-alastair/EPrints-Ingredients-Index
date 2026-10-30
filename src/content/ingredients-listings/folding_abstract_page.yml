@@ -1,0 +1,5 @@
+name: "Folding Abstract Page"
+creator: "EPrints Services"
+repo_url: "https://github.com/eprints/folding_abstract_page"
+description: "An ingredient for EPrints that adds folding per-document type sections to the abstract page."
+latest_eprints_version_tested: "3.4.6"

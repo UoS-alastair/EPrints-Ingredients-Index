@@ -1,0 +1,5 @@
+name: "BEVIS"
+creator: "EPrints Services"
+repo_url: "https://github.com/eprints/BEVIS"
+description: "BEVIS is a combination of open source tools to improve uptime and responsiveness of EPrints on the modern AI-bot filled web"
+latest_eprints_version_tested: "3.4.7"

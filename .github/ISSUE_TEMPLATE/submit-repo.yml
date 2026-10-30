@@ -1,0 +1,31 @@
+name: Submit an Ingredient
+description: Submit a new Ingredient to the collection.
+title: "[Ingredient Submission]: "
+labels: ["ingredient-submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for contributing! Fill out the details below. Once submitted, our bot will automatically convert this issue into a Pull Request for review.
+  - type: input
+    id: repo_url
+    attributes:
+      label: Repository URL
+      description: The full URL to the Ingredient repository (e.g., https://github.com/eprints/BEVIS).
+      placeholder: https://github.com/owner/repo
+    validations:
+      required: true
+  - type: input
+    id: latest_eprints_version_tested
+    attributes:
+      label: Latest EPrints version tested
+      description: The latest EPrints version this Ingredient has been tested with.
+      placeholder: 3.4.7
+  - type: textarea
+    id: description
+    attributes:
+      label: Short Description
+      description: Brief description of what this Ingredient does.
+      placeholder: This Ingredient adds...
+    validations:
+      required: true

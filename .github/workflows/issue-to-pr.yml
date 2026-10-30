@@ -1,0 +1,143 @@
+name: Convert Issue to Repository PR
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  process-submission:
+    if: contains(github.event.issue.labels.*.name, 'ingredient-submission')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Parse Issue and Fetch Metadata
+        id: parse_and_fetch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const issueBody = context.payload.issue.body || '';
+
+            function getField(label) {
+              const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const match = issueBody.match(
+                new RegExp(`^### ${escapedLabel}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n### |$)`, 'm')
+              );
+              return match ? match[1].trim() : '';
+            }
+
+            const rawUrl = getField('Repository URL');
+            if (!rawUrl) {
+              core.setFailed("Could not extract a valid Repository URL from the issue.");
+              return;
+            }
+
+            let repositoryUrl;
+            try {
+              repositoryUrl = new URL(rawUrl);
+            } catch (_) {
+              core.setFailed(`Invalid GitHub URL format: ${rawUrl}`);
+              return;
+            }
+
+            const pathParts = repositoryUrl.pathname.split('/').filter(Boolean);
+            if (
+              repositoryUrl.protocol !== 'https:' ||
+              repositoryUrl.hostname !== 'github.com' ||
+              repositoryUrl.username ||
+              repositoryUrl.password ||
+              pathParts.length !== 2
+            ) {
+              core.setFailed(`Invalid GitHub repository URL: ${rawUrl}`);
+              return;
+            }
+
+            const [owner, repositoryPath] = pathParts;
+            const repo = repositoryPath.replace(/\.git$/i, '');
+            if (!owner || !repo) {
+              core.setFailed(`Invalid GitHub repository URL: ${rawUrl}`);
+              return;
+            }
+
+            core.info(`Fetching details for ${owner}/${repo}...`);
+
+            // Fetch repo details
+            let repoData;
+            try {
+              const res = await github.rest.repos.get({
+                owner,
+                repo
+              });
+              repoData = res.data;
+            } catch (err) {
+              core.setFailed(`Failed to find repository on GitHub: ${err.message}`);
+              return;
+            }
+
+            const payload = {
+              name: repoData.name,
+              creator: owner,
+              repo_url: repoData.html_url,
+              description: getField('Short Description') || repoData.description || '',
+              latest_eprints_version_tested: getField('Latest EPrints version tested')
+            };
+
+            const targetDir = path.join(process.cwd(), 'src', 'content', 'ingredients-listings');
+            fs.mkdirSync(targetDir, { recursive: true });
+
+            const fileName = `${owner.toLowerCase()}-${repo.toLowerCase()}.yml`;
+            const filePath = path.join(targetDir, fileName);
+
+            const yaml = Object.entries(payload)
+              .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+              .join('\n') + '\n';
+            fs.writeFileSync(filePath, yaml);
+            core.info(`Wrote file: ${filePath}`);
+
+            core.setOutput('branch_name', `submission-${owner}-${repo}`.toLowerCase());
+            core.setOutput('repo_name', `${owner}/${repo}`);
+            core.setOutput('file_path', `src/content/ingredients-listings/${fileName}`);
+
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Add ${{ steps.parse_and_fetch.outputs.repo_name }} to repository catalog"
+          title: "Add `${{ steps.parse_and_fetch.outputs.repo_name }}`"
+          body: |
+            Closes #${{ github.event.issue.number }}
+
+            **Submitted by:** @${{ github.event.issue.user.login }}
+            **File created:** `${{ steps.parse_and_fetch.outputs.file_path }}`
+
+            Please review the metadata and merge to accept this repository into the catalog.
+          branch: ${{ steps.parse_and_fetch.outputs.branch_name }}
+          delete-branch: true
+
+      - name: Comment on Issue
+        if: steps.cpr.outputs.pull-request-number
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+        with:
+          script: |
+            const prNumber = process.env.PR_NUMBER;
+            const prUrl = process.env.PR_URL;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: `Thanks for the submission! An automated Pull Request has been created for review: [#${prNumber}](${prUrl}).`
+            });
